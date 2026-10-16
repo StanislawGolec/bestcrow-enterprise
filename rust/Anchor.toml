@@ -1,0 +1,23 @@
+[toolchain]
+package_manager = "npm"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+charity_vault = "74GsU9xRv9qvVHXXvTAAmRp8ETTEAwGjV1UkJQ6BZNpG"
+bestcrow = "3jGgPRa4gH25wfL49E3TAtpix5ePUZKWrQLT83eNZBVr"
+
+[programs.localnet]
+charity_vault = "74GsU9xRv9qvVHXXvTAAmRp8ETTEAwGjV1UkJQ6BZNpG"
+bestcrow = "3jGgPRa4gH25wfL49E3TAtpix5ePUZKWrQLT83eNZBVr"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "cargo test --manifest-path programs/charity-vault/Cargo.toml"
+
+[hooks]

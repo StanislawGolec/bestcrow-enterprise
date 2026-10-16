@@ -1,0 +1,12 @@
+import type { Metadata } from 'next';
+import CampaignForm from './campaign-form';
+
+export const metadata: Metadata = { title: 'New campaign | Bestcrow' };
+
+export default function NewCampaignPage() {
+  return (
+    <section aria-labelledby="new-campaign-title">
+      <CampaignForm />
+    </section>
+  );
+}
