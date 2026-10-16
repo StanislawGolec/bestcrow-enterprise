@@ -1,0 +1,9 @@
+.DS_Store
+.env
+context
+prompt
+CONTEXT.md
+skills
+# local surfpool logs
+rust/.surfpool/
+rust/target/
