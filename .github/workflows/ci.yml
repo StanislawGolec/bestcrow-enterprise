@@ -1,0 +1,81 @@
+name: Bestcrow Enterprise CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  backend-checks:
+    name: Backend Lint, TypeCheck & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: bestcrow-enterprise/backend/package.json
+      - name: Install Dependencies
+        run: |
+          cd bestcrow-enterprise/backend
+          npm ci
+      - name: TypeCheck
+        run: |
+          cd bestcrow-enterprise/backend
+          npm run typecheck
+      - name: Run Tests
+        run: |
+          cd bestcrow-enterprise/backend
+          npm test
+
+  frontend-checks:
+    name: Frontend Lint, TypeCheck & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: bestcrow-enterprise/frontend/package.json
+      - name: Install Dependencies
+        run: |
+          cd bestcrow-enterprise/frontend
+          npm ci
+      - name: TypeCheck
+        run: |
+          cd bestcrow-enterprise/frontend
+          npm run typecheck
+
+  kubernetes-helm-lint:
+    name: Helm Chart Lint & Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+      - name: Helm Lint
+        run: |
+          helm lint bestcrow-enterprise/charts/bestcrow
+
+  e2e-tests:
+    name: Playwright E2E Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright
+        run: |
+          cd bestcrow-enterprise/tests/e2e
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run E2E Tests
+        run: |
+          cd bestcrow-enterprise/tests/e2e
+          npx playwright test

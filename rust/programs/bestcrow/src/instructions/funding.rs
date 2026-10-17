@@ -1,9 +1,8 @@
-use anchor_lang::{prelude::*, system_program};
+use anchor_lang::prelude::*;
 
 use crate::{
     constants::*,
     error::BestcrowError,
-    instructions::campaign::touch_backer,
     state::{Backer, Campaign, CampaignState},
 };
 
@@ -11,7 +10,11 @@ use crate::{
 pub struct Pledge<'info> {
     #[account(mut)]
     pub backer: Signer<'info>,
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [CAMPAIGN_SEED, campaign.creator.as_ref(), &campaign.campaign_id.to_le_bytes()],
+        bump = campaign.bump
+    )]
     pub campaign: Account<'info, Campaign>,
     #[account(
         init_if_needed,
@@ -20,40 +23,44 @@ pub struct Pledge<'info> {
         seeds = [BACKER_SEED, campaign.key().as_ref(), backer.key().as_ref()],
         bump
     )]
-    pub ledger: Account<'info, Backer>,
-    #[account(mut, seeds = [VAULT_SEED, campaign.key().as_ref()], bump)]
-    /// CHECK: program-owned pledge vault PDA.
+    pub backer_ledger: Account<'info, Backer>,
+    #[account(
+        mut,
+        seeds = [VAULT_SEED, campaign.key().as_ref()],
+        bump
+    )]
+    /// CHECK: Protocol vault account derived as PDA.
     pub vault: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
-/// P1.2 — pledge during the funding window. **No cap at the goal** (overfunding
-/// allowed). A cancelled backer may pledge again; that resets `cancelled`.
 pub fn pledge(ctx: Context<Pledge>, amount: u64) -> Result<()> {
-    require!(amount > 0, BestcrowError::InvalidPledge);
-    let now = Clock::get()?.unix_timestamp;
+    require!(amount > 0, BestcrowError::InvalidPledgeAmount);
     let campaign = &mut ctx.accounts.campaign;
-    require!(campaign.state == CampaignState::Funding, BestcrowError::NotFunding);
-    require!(now < campaign.funding_deadline, BestcrowError::FundingClosed);
+    require!(
+        campaign.state == CampaignState::Funding,
+        BestcrowError::NotFundingPhase
+    );
 
-    let ledger = &mut ctx.accounts.ledger;
-    touch_backer(ledger, &campaign.key(), &ctx.accounts.backer.key(), ctx.bumps.ledger);
-    ledger.cancelled = false;
-    ledger.refund_claimed = false;
-    ledger.termination_refund_claimed = false;
-    ledger.amount = ledger
-        .amount
-        .checked_add(amount)
-        .ok_or(BestcrowError::ArithmeticOverflow)?;
-    campaign.raised = campaign
-        .raised
-        .checked_add(amount)
-        .ok_or(BestcrowError::ArithmeticOverflow)?;
+    let current_timestamp = Clock::get()?.unix_timestamp;
+    require!(
+        current_timestamp < campaign.funding_deadline,
+        BestcrowError::FundingWindowClosed
+    );
 
-    system_program::transfer(
+    let ledger = &mut ctx.accounts.backer_ledger;
+    if ledger.amount == 0 && !ledger.cancelled {
+        ledger.campaign = campaign.key();
+        ledger.backer = ctx.accounts.backer.key();
+        ledger.refund_claimed = false;
+        ledger.termination_refund_claimed = false;
+        ledger.bump = ctx.bumps.backer_ledger;
+    }
+
+    anchor_lang::system_program::transfer(
         CpiContext::new(
-            system_program::ID,
-            system_program::Transfer {
+            ctx.accounts.system_program.to_account_info(),
+            anchor_lang::system_program::Transfer {
                 from: ctx.accounts.backer.to_account_info(),
                 to: ctx.accounts.vault.to_account_info(),
             },
@@ -61,7 +68,25 @@ pub fn pledge(ctx: Context<Pledge>, amount: u64) -> Result<()> {
         amount,
     )?;
 
-    emit!(Pledged { campaign: campaign.key(), backer: ledger.backer, amount, raised: campaign.raised });
+    ledger.amount = ledger
+        .amount
+        .checked_add(amount)
+        .ok_or(BestcrowError::ArithmeticOverflow)?;
+    ledger.cancelled = false;
+
+    campaign.raised = campaign
+        .raised
+        .checked_add(amount)
+        .ok_or(BestcrowError::ArithmeticOverflow)?;
+
+    emit!(PledgeEvent {
+        campaign: campaign.key(),
+        backer: ctx.accounts.backer.key(),
+        amount,
+        total_backer_pledge: ledger.amount,
+        total_campaign_raised: campaign.raised,
+    });
+
     Ok(())
 }
 
@@ -69,67 +94,97 @@ pub fn pledge(ctx: Context<Pledge>, amount: u64) -> Result<()> {
 pub struct CancelPledge<'info> {
     #[account(mut)]
     pub backer: Signer<'info>,
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [CAMPAIGN_SEED, campaign.creator.as_ref(), &campaign.campaign_id.to_le_bytes()],
+        bump = campaign.bump
+    )]
     pub campaign: Account<'info, Campaign>,
     #[account(
         mut,
+        has_one = campaign,
         has_one = backer,
         seeds = [BACKER_SEED, campaign.key().as_ref(), backer.key().as_ref()],
-        bump = ledger.bump
+        bump = backer_ledger.bump
     )]
-    pub ledger: Account<'info, Backer>,
-    #[account(mut, seeds = [VAULT_SEED, campaign.key().as_ref()], bump)]
-    /// CHECK: program-owned pledge vault PDA.
+    pub backer_ledger: Account<'info, Backer>,
+    #[account(
+        mut,
+        seeds = [VAULT_SEED, campaign.key().as_ref()],
+        bump
+    )]
+    /// CHECK: Protocol vault account derived as PDA.
     pub vault: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
 }
 
-/// P1.2 — cancel the full current pledge, only while funding is open. Returns
-/// the pledge lamports to the backer (rent of the ledger stays until close).
 pub fn cancel_pledge(ctx: Context<CancelPledge>) -> Result<()> {
-    let now = Clock::get()?.unix_timestamp;
     let campaign = &mut ctx.accounts.campaign;
-    require!(campaign.state == CampaignState::Funding, BestcrowError::NotFunding);
-    require!(now < campaign.funding_deadline, BestcrowError::FundingClosed);
+    require!(
+        campaign.state == CampaignState::Funding,
+        BestcrowError::NotFundingPhase
+    );
 
-    let ledger = &mut ctx.accounts.ledger;
-    require!(!ledger.cancelled, BestcrowError::PledgeCancelled);
-    let amount = ledger.amount;
-    require!(amount > 0, BestcrowError::NoPledge);
+    let current_timestamp = Clock::get()?.unix_timestamp;
+    require!(
+        current_timestamp < campaign.funding_deadline,
+        BestcrowError::FundingWindowClosed
+    );
 
-    let vault = ctx.accounts.vault.to_account_info();
-    require!(vault.lamports() >= amount, BestcrowError::InsufficientVault);
-    **vault.try_borrow_mut_lamports()? = vault
-        .lamports()
-        .checked_sub(amount)
-        .ok_or(BestcrowError::InsufficientVault)?;
-    let backer = ctx.accounts.backer.to_account_info();
-    **backer.try_borrow_mut_lamports()? = backer
-        .lamports()
-        .checked_add(amount)
+    let ledger = &mut ctx.accounts.backer_ledger;
+    require!(ledger.amount > 0, BestcrowError::NoActivePledge);
+    require!(!ledger.cancelled, BestcrowError::PledgeAlreadyCancelled);
+
+    let refund_amount = ledger.amount;
+    let vault_seeds = &[
+        VAULT_SEED,
+        campaign.to_account_info().key.as_ref(),
+        &[ctx.bumps.vault],
+    ];
+
+    anchor_lang::system_program::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.system_program.to_account_info(),
+            anchor_lang::system_program::Transfer {
+                from: ctx.accounts.vault.to_account_info(),
+                to: ctx.accounts.backer.to_account_info(),
+            },
+            &[&vault_seeds[..]],
+        ),
+        refund_amount,
+    )?;
+
+    campaign.raised = campaign
+        .raised
+        .checked_sub(refund_amount)
         .ok_or(BestcrowError::ArithmeticOverflow)?;
 
     ledger.amount = 0;
     ledger.cancelled = true;
-    campaign.raised = campaign
-        .raised
-        .checked_sub(amount)
-        .ok_or(BestcrowError::ArithmeticOverflow)?;
 
-    emit!(PledgeCancelled { campaign: campaign.key(), backer: ledger.backer, amount });
+    emit!(PledgeCancelledEvent {
+        campaign: campaign.key(),
+        backer: ctx.accounts.backer.key(),
+        refunded_amount: refund_amount,
+        remaining_campaign_raised: campaign.raised,
+    });
+
     Ok(())
 }
 
 #[event]
-pub struct Pledged {
+pub struct PledgeEvent {
     pub campaign: Pubkey,
     pub backer: Pubkey,
     pub amount: u64,
-    pub raised: u64,
+    pub total_backer_pledge: u64,
+    pub total_campaign_raised: u64,
 }
 
 #[event]
-pub struct PledgeCancelled {
+pub struct PledgeCancelledEvent {
     pub campaign: Pubkey,
     pub backer: Pubkey,
-    pub amount: u64,
+    pub refunded_amount: u64,
+    pub remaining_campaign_raised: u64,
 }
