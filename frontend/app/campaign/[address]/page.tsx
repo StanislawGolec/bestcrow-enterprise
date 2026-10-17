@@ -4,6 +4,7 @@ import { useEffect, useState, use } from 'react';
 import { useStrategy } from '../../../components/providers';
 import { CampaignModel } from '../../../lib/types';
 import { MilestoneTimeline } from '../../../components/milestone_timeline';
+import { useCampaignStream } from '../../../lib/hooks/use_campaign_stream';
 import { ExternalLink, ShieldCheck, Clock, Users, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ address: string }> }) {
@@ -27,6 +28,13 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ addre
       setLoading(false);
     }
   };
+
+  const { isConnected: isLiveConnected } = useCampaignStream(campaignAddress, {
+    enabled: true,
+    onEvent: () => {
+      void fetchCampaign();
+    },
+  });
 
   useEffect(() => {
     void fetchCampaign();
@@ -102,9 +110,25 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ addre
     <div className="space-y-10 py-6">
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-            {campaign.status}
-          </span>
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+              {campaign.status}
+            </span>
+            <div
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium border transition-colors ${
+                isLiveConnected
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : 'border-slate-800 bg-slate-900 text-slate-500'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  isLiveConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                }`}
+              />
+              <span>{isLiveConnected ? 'Live Feed Active' : 'Polling Sync'}</span>
+            </div>
+          </div>
           <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
             <span>PDA: {campaign.address.slice(0, 8)}...{campaign.address.slice(-6)}</span>
             <a

@@ -5,11 +5,13 @@ import { DomainError } from './domain/errors.js';
 import { CampaignController } from './controllers/campaign_controller.js';
 import { SystemController } from './controllers/system_controller.js';
 import { EvidenceController } from './controllers/evidence_controller.js';
+import { StreamController } from './controllers/stream_controller.js';
 
 export function createApplication(
   campaignController: CampaignController,
   systemController: SystemController,
   evidenceController?: EvidenceController,
+  streamController?: StreamController,
   corsOrigin: string = '*'
 ): Express {
   const app = express();
@@ -30,6 +32,12 @@ export function createApplication(
   if (evidenceController) {
     app.post('/api/evidence/upload', evidenceController.uploadEvidence);
     app.get('/api/evidence/:uriOrHash', evidenceController.getEvidence);
+  }
+
+  if (streamController) {
+    app.get('/api/campaigns/:address/stream', streamController.streamCampaignEvents);
+    app.get('/api/events/stream', streamController.streamAllEvents);
+    app.post('/api/campaigns/:address/events/broadcast', streamController.broadcastEvent);
   }
 
   // Global Error Handler
