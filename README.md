@@ -11,32 +11,28 @@
 
 ## What is Bestcrow?
 
-Bestcrow is an on-chain milestone escrow protocol designed for **early-stage startup teams and prototype builders** on Solana.
+Bestcrow is an on-chain milestone escrow protocol designed for startup teams and prototype builders on Solana.
 
-Rather than giving a creator 100% of capital upfront (the Kickstarter model, which suffers from creator rug risk and 8% centralized fees) or launching speculative tokens with zero product delivery accountability (pump.fun), Bestcrow locks funds in non-custodial Program Derived Address (PDA) vaults and releases capital in **2–5 immutable tranches gated by Arweave-hashed proof of work and contributor votes**.
-
-> **Single Source of Truth:** For full technical specifications, mathematical proofs, economic parameters, and deployment runbooks, see the consolidated [Master Development Plan](docs/DEVELOPMENT_PLAN.md).
+Rather than giving a creator 100% of capital upfront (the Kickstarter model, which suffers from creator delivery risk and high platform fees) or launching speculative tokens with zero accountability, Bestcrow locks funds in non-custodial Program Derived Address (PDA) vaults and releases capital in 2-5 immutable tranches gated by Arweave-hashed proof of work and contributor votes.
 
 ---
 
 ## Key Features
 
-- **Sealed Milestone Terms:** Creators draft 2–5 tranches (each $\le 50\%$, summing to exactly 100%) and seal them before the first contribution. No schedule or terms can be altered once funding starts.
-- **Fair Economic Rules:**
-  - **1% Protocol Fee:** Charged once only on successful raises (`raised >= goal`) to a published treasury.
-  - **0% Fee on Failure:** If the goal is missed, backers claim **100% of their deposited SOL**.
-  - **0 SOL Creator Deposit:** Zero upfront barrier for builders in the MVP.
+- **Sealed Milestone Terms:** Creators draft 2-5 tranches (each <= 50%, summing to 100%) and seal them before the first contribution. Terms cannot be modified once funding begins.
+- **Economic Rules:**
+  - **1% Protocol Fee:** Charged only on successful raises (`raised >= goal`) to the treasury.
+  - **0% Fee on Failure:** If the goal is not met, backers reclaim 100% of their deposited SOL.
+  - **0 SOL Creator Deposit:** No upfront capital requirement for project creators.
 - **Contribution-Weighted Voting:**
-  - Evidence submission opens a fixed 7-day vote.
-  - Approval requires YES vote weight **strictly greater than 50% of all final pledges** (`yes_weight * 2 > final_raised`).
-  - First rejection opens a 30-day revision window; a second rejection triggers permissionless termination.
-- **Permissionless Settlement:**
-  - Anyone can trigger timeout or finalization transactions after on-chain deadlines expire.
-  - Pro-rata refund pool protects backers if a milestone fails.
+  - Milestone proof submission initiates a 7-day voting window.
+  - Approval requires approval weight strictly greater than 50% of final pledges (`yes_weight * 2 > final_raised`).
+  - A rejected milestone opens a 30-day revision window; a second rejection triggers contract termination.
+- **Permissionless Settlement:** Anyone can trigger timeout or settlement transactions after on-chain deadlines expire.
 - **Dual Operating Modes:**
-  - **Devnet Mode:** Signs real transactions in Phantom with test SOL. Confirmed transactions provide direct, clickable links to **Solscan Devnet** and **Solana Explorer**.
-  - **Mock Mode:** Browser-only demo mode that moves no SOL and generates no on-chain transactions, enabling instant testing without test SOL.
-- **Modern Solana Stack:** Built with Anchor and **`@solana/kit` (Solana Web3.js v2)** with full type-safety and RPC failover backoff.
+  - **Devnet Mode:** Signs real transactions via Phantom wallet with direct links to Solscan Devnet and Solana Explorer.
+  - **Mock Mode:** Client-side simulation mode that requires no wallet or test SOL for instant local testing.
+- **Solana Web3 Stack:** Built with Anchor and `@solana/kit` (Web3.js v2) with RPC retry backoff.
 
 ---
 
@@ -45,8 +41,8 @@ Rather than giving a creator 100% of capital upfront (the Kickstarter model, whi
 Docker Compose is the recommended way to run Bestcrow locally:
 
 ```bash
-git clone https://github.com/maciejzujtu/solana-bestcrow.git
-cd solana-bestcrow
+git clone https://github.com/StanislawGolec/Bestcrow.git
+cd Bestcrow
 
 # Copy environment configuration
 cp .env.example .env          # Windows PowerShell: Copy-Item .env.example .env
@@ -94,8 +90,8 @@ cargo test --workspace
 
 ## Documentation Index
 
-- [Master Development Plan & Protocol Spec](docs/DEVELOPMENT_PLAN.md) — Consolidated architecture, economic models, decisions D-001–D-008, and roadmap.
-- [Colosseum Hackathon Submission Brief](docs/COLOSSEUM_SUBMISSION.md) — Pitch deck, track selection, video demo script, and hackathon details.
-- [Devnet Deployment Runbook](docs/DEVNET_DEPLOYMENT.md) — Safe deployment checklist, IDL generation, and config initialization.
-- [Backend API Reference](backend/API.md) — Indexer endpoints, SQLite schemas, and RPC integration.
-- [Frontend Design Brief](frontend/STOCKGATE_FRONTEND_SKETCH.md) — Visual design language and user journeys.
+- [Master Development Plan & Protocol Spec](docs/DEVELOPMENT_PLAN.md): Consolidated architecture, economic models, decisions D-001 to D-008, and roadmap.
+- [Colosseum Hackathon Submission Brief](docs/COLOSSEUM_SUBMISSION.md): Pitch deck, track selection, video demo script, and hackathon details.
+- [Devnet Deployment Runbook](docs/DEVNET_DEPLOYMENT.md): Deployment checklist, IDL generation, and config initialization.
+- [Backend API Reference](backend/API.md): Indexer endpoints, SQLite schemas, and RPC integration.
+- [Frontend Design Brief](frontend/STOCKGATE_FRONTEND_SKETCH.md): Visual design language and user journeys.
