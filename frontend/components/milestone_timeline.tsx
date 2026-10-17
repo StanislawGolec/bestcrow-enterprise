@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { MilestoneModel, CampaignModel } from '../lib/types';
+import { MilestoneModel, CampaignModel, MilestoneProofMetadata } from '../lib/types';
 import { useStrategy } from './providers';
-import { CheckCircle2, Clock, ThumbsUp, ThumbsDown, Lock, ExternalLink, FileCheck, ArrowRight } from 'lucide-react';
+import { EvidenceModal } from './evidence_modal';
+import { bytesToHex } from '../lib/solana/evidence';
+import { CheckCircle2, Clock, ThumbsUp, ThumbsDown, Lock, ExternalLink, FileCheck, ArrowRight, ShieldCheck } from 'lucide-react';
 
 interface MilestoneTimelineProps {
   campaign: CampaignModel;
@@ -15,6 +17,8 @@ export function MilestoneTimeline({ campaign, onRefresh }: MilestoneTimelineProp
   const [submitting, setSubmitting] = useState<number | null>(null);
   const [evidenceHashInput, setEvidenceHashInput] = useState<string>('');
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
+  const [modalMilestone, setModalMilestone] = useState<MilestoneModel | null>(null);
+  const [modalMode, setModalMode] = useState<'submit' | 'review'>('submit');
 
   const handleVote = async (milestoneIndex: number, approve: boolean) => {
     setSubmitting(milestoneIndex);
@@ -70,6 +74,49 @@ export function MilestoneTimeline({ campaign, onRefresh }: MilestoneTimelineProp
     } finally {
       setSubmitting(null);
     }
+  };
+
+  const handleOpenSubmitModal = (m: MilestoneModel) => {
+    setModalMilestone(m);
+    setModalMode('submit');
+  };
+
+  const handleOpenReviewModal = (m: MilestoneModel) => {
+    setModalMilestone(m);
+    setModalMode('review');
+  };
+
+  const handleSubmitEvidenceFromModal = async (
+    _metadata: MilestoneProofMetadata,
+    evidenceHashBytes: number[],
+    evidenceUri: string
+  ) => {
+    if (!modalMilestone) return;
+    setSubmitting(modalMilestone.index);
+    setFeedbackMessage('');
+    try {
+      const hashHex = bytesToHex(evidenceHashBytes);
+      const result = await strategy.submitEvidence(
+        campaign.address,
+        modalMilestone.index,
+        hashHex,
+        evidenceUri,
+        activeWallet
+      );
+      setFeedbackMessage(result.message || 'Evidence submitted and verified');
+      setModalMilestone(null);
+      onRefresh();
+    } catch (err) {
+      setFeedbackMessage(err instanceof Error ? err.message : 'Submission failed');
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
+  const handleVoteFromModal = async (approve: boolean) => {
+    if (!modalMilestone) return;
+    await handleVote(modalMilestone.index, approve);
+    setModalMilestone(null);
   };
 
   const handleSubmitEvidence = async (milestoneIndex: number) => {
@@ -154,23 +201,33 @@ export function MilestoneTimeline({ campaign, onRefresh }: MilestoneTimelineProp
                 </div>
 
                 {milestone.evidenceHash && (
-                  <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-950/70 p-3 border border-slate-800">
-                    <div className="flex items-center gap-2 overflow-hidden">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-950/70 p-3 border border-slate-800">
+                    <div className="flex items-center gap-2 overflow-hidden min-w-0">
                       <FileCheck className="h-4 w-4 text-emerald-400 shrink-0" />
                       <span className="text-xs font-mono text-slate-300 truncate">
                         {milestone.evidenceHash}
                       </span>
                     </div>
-                    {milestone.evidenceUri && (
-                      <a
-                        href={milestone.evidenceUri}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:underline shrink-0 ml-3"
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReviewModal(milestone)}
+                        className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 font-medium bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20 hover:bg-emerald-500/20 transition-all"
                       >
-                        Proof link <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Verify Proof
+                      </button>
+                      {milestone.evidenceUri && (
+                        <a
+                          href={milestone.evidenceUri}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white hover:underline"
+                        >
+                          Proof link <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -215,6 +272,14 @@ export function MilestoneTimeline({ campaign, onRefresh }: MilestoneTimelineProp
                         Vote Reject
                       </button>
                       <button
+                        type="button"
+                        onClick={() => handleOpenReviewModal(milestone)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-teal-500/30 bg-teal-500/10 px-3 py-1.5 text-xs font-semibold text-teal-300 hover:bg-teal-500/20 transition-all"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Verify & Vote Modal
+                      </button>
+                      <button
                         onClick={() => handleFinalizeVote(milestone.index)}
                         disabled={submitting === milestone.index}
                         className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition-all ml-auto"
@@ -226,12 +291,22 @@ export function MilestoneTimeline({ campaign, onRefresh }: MilestoneTimelineProp
                 )}
 
                 {isPendingEvidence && isCurrent && (
-                  <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950 p-3.5">
-                    <p className="text-xs font-semibold text-slate-300 mb-2">Submit Milestone Arweave Proof</p>
-                    <div className="flex gap-2">
+                  <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-300">Submit Milestone Proof of Work</p>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSubmitModal(milestone)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-emerald-400 transition-all"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Open Verification Wizard
+                      </button>
+                    </div>
+                    <div className="flex gap-2 pt-1 border-t border-slate-800/60">
                       <input
                         type="text"
-                        placeholder="arweave://x8Rk29... or SHA-256 hash"
+                        placeholder="Or enter direct arweave:// URI / SHA-256 hash"
                         value={evidenceHashInput}
                         onChange={(e) => setEvidenceHashInput(e.target.value)}
                         className="flex-1 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
@@ -239,9 +314,9 @@ export function MilestoneTimeline({ campaign, onRefresh }: MilestoneTimelineProp
                       <button
                         onClick={() => handleSubmitEvidence(milestone.index)}
                         disabled={submitting === milestone.index || !evidenceHashInput.trim()}
-                        className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+                        className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-50"
                       >
-                        Submit Proof
+                        Quick Submit
                       </button>
                     </div>
                   </div>
@@ -273,6 +348,22 @@ export function MilestoneTimeline({ campaign, onRefresh }: MilestoneTimelineProp
           );
         })}
       </div>
+
+      {modalMilestone && (
+        <EvidenceModal
+          isOpen={true}
+          onClose={() => setModalMilestone(null)}
+          mode={modalMode}
+          campaignAddress={campaign.address}
+          milestone={modalMilestone}
+          activeWallet={activeWallet}
+          isCreator={Boolean(activeWallet && activeWallet.toLowerCase() === campaign.creator.toLowerCase())}
+          isBacker={true}
+          backerWeightSol={2.0}
+          onSubmitEvidence={handleSubmitEvidenceFromModal}
+          onVote={handleVoteFromModal}
+        />
+      )}
     </div>
   );
 }
