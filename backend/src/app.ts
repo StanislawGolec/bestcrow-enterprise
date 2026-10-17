@@ -4,10 +4,12 @@ import { ZodError } from 'zod';
 import { DomainError } from './domain/errors.js';
 import { CampaignController } from './controllers/campaign_controller.js';
 import { SystemController } from './controllers/system_controller.js';
+import { EvidenceController } from './controllers/evidence_controller.js';
 
 export function createApplication(
   campaignController: CampaignController,
   systemController: SystemController,
+  evidenceController?: EvidenceController,
   corsOrigin: string = '*'
 ): Express {
   const app = express();
@@ -24,6 +26,11 @@ export function createApplication(
   app.get('/api/campaigns/:address/backers', campaignController.getBackers);
   app.get('/api/campaigns/:address/events', campaignController.getEvents);
   app.get('/api/backers/:wallet/contributions', campaignController.getContributionsByWallet);
+
+  if (evidenceController) {
+    app.post('/api/evidence/upload', evidenceController.uploadEvidence);
+    app.get('/api/evidence/:uriOrHash', evidenceController.getEvidence);
+  }
 
   // Global Error Handler
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

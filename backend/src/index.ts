@@ -12,6 +12,8 @@ import { CampaignService } from './services/campaign_service.js';
 import { IndexerService } from './services/indexer_service.js';
 import { CampaignController } from './controllers/campaign_controller.js';
 import { SystemController } from './controllers/system_controller.js';
+import { EvidenceController } from './controllers/evidence_controller.js';
+import { ArweaveStorageService } from './services/storage_service.js';
 import { createApplication } from './app.js';
 
 if (environment.DB_PATH !== ':memory:') {
@@ -38,6 +40,7 @@ const retryPolicy = new ExponentialBackoffRetry({
 
 const solanaService = new SolanaService(rpcStrategy, retryPolicy, environment.BESTCROW_PROGRAM_ID);
 const campaignService = new CampaignService(campaignRepository, backerRepository, eventRepository);
+const storageService = new ArweaveStorageService();
 const indexerService = new IndexerService(
   solanaService,
   campaignRepository,
@@ -48,8 +51,9 @@ const indexerService = new IndexerService(
 
 const campaignController = new CampaignController(campaignService);
 const systemController = new SystemController(rpcStrategy, solanaService);
+const evidenceController = new EvidenceController(storageService);
 
-const app = createApplication(campaignController, systemController, environment.CORS_ORIGIN);
+const app = createApplication(campaignController, systemController, evidenceController, environment.CORS_ORIGIN);
 
 const server = app.listen(environment.PORT, () => {
   console.log(`[Bestcrow] Server listening on port ${environment.PORT}`);

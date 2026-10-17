@@ -73,3 +73,24 @@ export interface TransactionResult {
   success: boolean;
   message?: string;
 }
+
+export interface MilestoneProofMetadata {
+  campaignAddress: string;
+  trancheIndex: number;
+  title: string;
+  summary: string;
+  deliverables: string[];
+  repositoryCommitSha?: string;
+  externalDemoUrl?: string;
+  submittedAt: number;
+  authorWallet: string;
+}
+
+export interface EvidenceIntegrityReport {
+  contentUri: string;
+  storedHashHex: string;
+  computedHashHex: string;
+  isVerified: boolean;
+  metadata: MilestoneProofMetadata;
+}
+
