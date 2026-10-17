@@ -1,19 +1,18 @@
 {
   "name": "bestcrow-backend",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Bestcrow chain API, accounts, wallet verification and SOL payment tracking",
+  "description": "Bestcrow Enterprise API and Solana Event Indexer",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "demo": "tsx scripts/run-demo.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.test.json && node scripts/test.mjs"
+    "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@solana/kit": "^8.3.0",

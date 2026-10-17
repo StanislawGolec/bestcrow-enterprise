@@ -1,40 +1,33 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-
 import './globals.css';
-import { Providers } from './providers';
-import WalletControls from './wallet-controls';
-import ModeControls from './mode-controls';
+import { StrategyProvider } from '../components/providers';
+import { NavigationBar } from '../components/navigation_bar';
 
 export const metadata: Metadata = {
-  title: 'Bestcrow | milestone funding for startup prototypes',
-  description: 'Community-backed startup prototypes with public milestones and Solana Devnet transactions.',
+  title: 'Bestcrow Enterprise | Non-Custodial Milestone Escrow on Solana',
+  description: 'Enterprise milestone escrow crowdfunding platform for early-stage startup prototypes on Solana.',
 };
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-white text-slate-950">
-        <Providers>
-        <header className="border-b border-slate-200">
-          <nav className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4" aria-label="Main navigation">
-            <div className="flex flex-wrap items-center gap-4">
-              <Link href="/" className="brand-mark">BESTCROW</Link>
-              <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-                <Link href="/discover" className="hover:underline">Discover</Link>
-                <Link href="/how-it-works" className="hover:underline">How it works</Link>
-                <Link href="/my-contributions" className="hover:underline">My support</Link>
-                <Link href="/profile" className="hover:underline">Profile</Link>
-              </div>
+    <html lang="en" className="dark">
+      <body className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500/30 selection:text-emerald-300">
+        <StrategyProvider>
+          <NavigationBar />
+          <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
+            {children}
+          </main>
+          <footer className="border-t border-slate-900 bg-slate-950 py-8 px-6 text-center text-xs text-slate-500">
+            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p>Bestcrow Enterprise Protocol • Solana BPF & Kubernetes Cloud-Native</p>
+              <p>Engineered for High-Assurance Startup Financing</p>
             </div>
-            <div className="flex flex-wrap items-center gap-3"><ModeControls /><WalletControls /></div>
-          </nav>
-        </header>
-        <main className="mx-auto min-h-[calc(100vh-7rem)] max-w-5xl px-6 py-12">{children}</main>
-        <footer className="border-t border-slate-200 px-6 py-4 text-sm text-slate-600">
-          <div className="mx-auto flex max-w-5xl flex-wrap justify-between gap-x-4 gap-y-1"><span>BESTCROW</span><span>Devnet uses test SOL · 1% fee after successful fundraising · network costs separate</span></div>
-        </footer>
-        </Providers>
+          </footer>
+        </StrategyProvider>
       </body>
     </html>
   );

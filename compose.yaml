@@ -1,63 +1,51 @@
-# One command to present:  docker compose up --build
-# Web: http://localhost:3000   API: http://localhost:4000/api/health
-name: charity-vault # Preserve the existing named SQLite volume.
+name: bestcrow-enterprise
 
 services:
   frontend:
     build:
       context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
       args:
         NEXT_PUBLIC_SOLANA_RPC_URL: ${NEXT_PUBLIC_SOLANA_RPC_URL:-https://api.devnet.solana.com}
-        NEXT_PUBLIC_SOLANA_RPC_FALLBACK_URL: ${NEXT_PUBLIC_SOLANA_RPC_FALLBACK_URL:-https://api.devnet.solana.com}
-        NEXT_PUBLIC_CHARITY_VAULT_PROGRAM_ID: ${CHARITY_VAULT_PROGRAM_ID:-74GsU9xRv9qvVHXXvTAAmRp8ETTEAwGjV1UkJQ6BZNpG}
-        NEXT_PUBLIC_SOLANA_RPC_RETRY_ATTEMPTS: ${RPC_RETRY_ATTEMPTS:-3}
-        NEXT_PUBLIC_SOLANA_RPC_RETRY_BASE_DELAY_MS: ${RPC_RETRY_BASE_DELAY_MS:-250}
+        NEXT_PUBLIC_PROGRAM_ID: ${BESTCROW_PROGRAM_ID:-3jGgPRa4gH25wfL49E3TAtpix5ePUZKWrQLT83eNZBVr}
         NEXT_PUBLIC_PAYMENT_MODE: ${NEXT_PUBLIC_PAYMENT_MODE:-mock}
-        NEXT_PUBLIC_SOLANA_CHAIN: ${NEXT_PUBLIC_SOLANA_CHAIN:-solana:devnet}
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
-    image: bestcrow-web:latest
-    init: true
+    image: bestcrow-frontend:latest
     ports:
       - "3000:3000"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
-      interval: 10s
-      timeout: 10s
-      start_period: 30s
-      retries: 6
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(res => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: ../docker/Dockerfile.backend
     image: bestcrow-backend:latest
-    init: true
     environment:
       PORT: "4000"
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://127.0.0.1:3000}
-      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
-      RPC_RETRY_ATTEMPTS: ${RPC_RETRY_ATTEMPTS:-3}
-      RPC_RETRY_BASE_DELAY_MS: ${RPC_RETRY_BASE_DELAY_MS:-250}
-      CHARITY_VAULT_PROGRAM_ID: ${CHARITY_VAULT_PROGRAM_ID:-74GsU9xRv9qvVHXXvTAAmRp8ETTEAwGjV1UkJQ6BZNpG}
-      CLUSTER: devnet
-      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
-      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-86400}
-      WALLET_CHALLENGE_TTL_SECONDS: ${WALLET_CHALLENGE_TTL_SECONDS:-300}
-      AUTH_ATTEMPTS_PER_MINUTE: ${AUTH_ATTEMPTS_PER_MINUTE:-20}
+      SOLANA_RPC_PRIMARY_URL: ${SOLANA_RPC_PRIMARY_URL:-https://api.devnet.solana.com}
+      SOLANA_RPC_FALLBACK_URL: ${SOLANA_RPC_FALLBACK_URL:-https://api.testnet.solana.com}
+      BESTCROW_PROGRAM_ID: ${BESTCROW_PROGRAM_ID:-3jGgPRa4gH25wfL49E3TAtpix5ePUZKWrQLT83eNZBVr}
       DB_PATH: /app/data/bestcrow.db
       INDEXER_ENABLED: ${INDEXER_ENABLED:-true}
-      POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-15000}
-      SIGNATURE_SCAN_LIMIT: ${SIGNATURE_SCAN_LIMIT:-200}
+      INDEXER_POLL_INTERVAL_MS: ${INDEXER_POLL_INTERVAL_MS:-15000}
     ports:
       - "4000:4000"
     volumes:
-      - backend-data:/app/data
+      - backend_data:/app/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
-      interval: 10s
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health').then(res => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
       timeout: 5s
-      start_period: 20s
       retries: 3
+      start_period: 15s
 
 volumes:
-  backend-data:
+  backend_data:

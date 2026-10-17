@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bestcrow.fullname" . }}-config
+  labels:
+    {{- include "bestcrow.labels" . | nindent 4 }}
+data:
+  NODE_ENV: {{ .Values.global.environment | quote }}
+  SOLANA_RPC_PRIMARY_URL: {{ .Values.config.solanaRpcPrimaryUrl | quote }}
+  SOLANA_RPC_FALLBACK_URL: {{ .Values.config.solanaRpcFallbackUrl | quote }}
+  BESTCROW_PROGRAM_ID: {{ .Values.config.programId | quote }}
+  CLUSTER: {{ .Values.config.cluster | quote }}
+  INDEXER_ENABLED: {{ .Values.config.indexerEnabled | quote }}
+  INDEXER_POLL_INTERVAL_MS: {{ .Values.config.indexerPollIntervalMs | quote }}
+  PORT: {{ .Values.backend.service.port | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "bestcrow.fullname" . }}-secret
+  labels:
+    {{- include "bestcrow.labels" . | nindent 4 }}
+type: Opaque
+data:
+  # Base64 encoded placeholders for production secrets (managed via Vault/KMS/ExternalSecrets)
+  RPC_API_KEY: ""
