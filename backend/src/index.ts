@@ -21,6 +21,7 @@ import { StreamController } from './controllers/stream_controller.js';
 import { MetricsController } from './controllers/metrics_controller.js';
 import { MetricsService } from './services/metrics_service.js';
 import { ArweaveStorageService } from './services/storage_service.js';
+import { DatabaseBackupService } from './services/backup_service.js';
 import { createApplication } from './app.js';
 
 if (environment.DB_PATH !== ':memory:') {
@@ -30,6 +31,11 @@ if (environment.DB_PATH !== ':memory:') {
 const database = new DatabaseSync(environment.DB_PATH);
 database.exec('PRAGMA journal_mode = WAL;');
 database.exec('PRAGMA foreign_keys = ON;');
+
+const backupService = new DatabaseBackupService(database, {
+  backupDirectory: environment.DB_PATH !== ':memory:' ? dirname(environment.DB_PATH) + '/backups' : './data/backups',
+  retentionLimit: 5,
+});
 
 const campaignRepository = new SqliteCampaignRepository(database);
 const backerRepository = new SqliteBackerRepository(database);
@@ -127,6 +133,14 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     solanaIndexer.stop();
     indexerService.stop();
     server.close(() => {
+      try {
+        if (environment.DB_PATH !== ':memory:') {
+          backupService.createSnapshot('shutdown_snapshot.sqlite');
+          console.log('[Bestcrow] Pre-shutdown database snapshot created successfully');
+        }
+      } catch (err) {
+        console.error('[Bestcrow] Warning: Failed creating pre-shutdown snapshot:', err);
+      }
       database.close();
       console.log('[Bestcrow] Server stopped successfully');
       process.exit(0);
