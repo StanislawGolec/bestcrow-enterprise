@@ -17,6 +17,8 @@ import { CampaignController } from './controllers/campaign_controller.js';
 import { SystemController } from './controllers/system_controller.js';
 import { EvidenceController } from './controllers/evidence_controller.js';
 import { StreamController } from './controllers/stream_controller.js';
+import { MetricsController } from './controllers/metrics_controller.js';
+import { MetricsService } from './services/metrics_service.js';
 import { ArweaveStorageService } from './services/storage_service.js';
 import { createApplication } from './app.js';
 
@@ -47,6 +49,7 @@ const solanaService = new SolanaService(rpcStrategy, retryPolicy, environment.BE
 const campaignService = new CampaignService(campaignRepository, backerRepository, eventRepository);
 const storageService = new ArweaveStorageService();
 const eventBroadcaster = new EventBroadcaster();
+const metricsService = new MetricsService();
 
 const solanaIndexer = new SolanaIndexer(
   solanaService,
@@ -73,12 +76,15 @@ const campaignController = new CampaignController(campaignService);
 const systemController = new SystemController(rpcStrategy, solanaService);
 const evidenceController = new EvidenceController(storageService);
 const streamController = new StreamController(eventBroadcaster, solanaIndexer);
+const metricsController = new MetricsController(metricsService);
 
 const app = createApplication(
   campaignController,
   systemController,
   evidenceController,
   streamController,
+  metricsController,
+  metricsService,
   environment.CORS_ORIGIN
 );
 

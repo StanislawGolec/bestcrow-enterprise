@@ -6,18 +6,30 @@ import { CampaignController } from './controllers/campaign_controller.js';
 import { SystemController } from './controllers/system_controller.js';
 import { EvidenceController } from './controllers/evidence_controller.js';
 import { StreamController } from './controllers/stream_controller.js';
+import { MetricsController } from './controllers/metrics_controller.js';
+import { MetricsService } from './services/metrics_service.js';
 
 export function createApplication(
   campaignController: CampaignController,
   systemController: SystemController,
   evidenceController?: EvidenceController,
   streamController?: StreamController,
+  metricsController?: MetricsController,
+  metricsService?: MetricsService,
   corsOrigin: string = '*'
 ): Express {
   const app = express();
 
+  if (metricsService) {
+    app.use(metricsService.createMiddleware());
+  }
+
   app.use(cors({ origin: corsOrigin, methods: ['GET', 'POST', 'PATCH', 'OPTIONS'] }));
   app.use(express.json());
+
+  if (metricsController) {
+    app.get('/metrics', metricsController.getMetrics);
+  }
 
   app.get('/api/health', systemController.getHealth);
   app.get('/api/system/status', systemController.getStatus);
