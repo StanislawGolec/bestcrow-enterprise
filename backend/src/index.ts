@@ -8,6 +8,7 @@ import { SqliteEventRepository } from './repositories/event_repository.js';
 import { SqliteProcessedTransactionRepository } from './repositories/transaction_repository.js';
 import { PrimaryFallbackRpcStrategy } from './strategies/rpc_strategy.js';
 import { ExponentialBackoffRetry } from './strategies/exponential_backoff_retry.js';
+import { CircuitBreaker } from './strategies/circuit_breaker.js';
 import { SolanaService } from './services/solana_service.js';
 import { CampaignService } from './services/campaign_service.js';
 import { IndexerService } from './services/indexer_service.js';
@@ -45,11 +46,27 @@ const retryPolicy = new ExponentialBackoffRetry({
   initialDelayMs: environment.RPC_RETRY_INITIAL_DELAY_MS,
 });
 
-const solanaService = new SolanaService(rpcStrategy, retryPolicy, environment.BESTCROW_PROGRAM_ID);
+const metricsService = new MetricsService();
+
+const circuitBreaker = new CircuitBreaker({
+  failureThreshold: 5,
+  resetTimeoutMs: 15_000,
+  onStateChange: (_from, to) => {
+    if (to === 'OPEN') {
+      metricsService.recordRpcFailover();
+    }
+  },
+});
+
+const solanaService = new SolanaService(
+  rpcStrategy,
+  retryPolicy,
+  environment.BESTCROW_PROGRAM_ID,
+  circuitBreaker
+);
 const campaignService = new CampaignService(campaignRepository, backerRepository, eventRepository);
 const storageService = new ArweaveStorageService();
 const eventBroadcaster = new EventBroadcaster();
-const metricsService = new MetricsService();
 
 const solanaIndexer = new SolanaIndexer(
   solanaService,
