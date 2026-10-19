@@ -48,3 +48,13 @@ export async function findBondAddress(campaign: Address): Promise<Address> {
   });
   return pda;
 }
+
+export async function findVoteAddress(tranche: Address, round: number, backer: Address): Promise<Address> {
+  const program = address(PROGRAM_ID);
+  const [pda] = await getProgramDerivedAddress({
+    programAddress: program,
+    seeds: [new TextEncoder().encode('vote'), tranche, new Uint8Array([round]), backer],
+  });
+  return pda;
+}
+

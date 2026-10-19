@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useStrategy } from '../components/providers';
 import { CampaignModel } from '../lib/types';
 import { CampaignCard } from '../components/campaign_card';
+import { InvestorShowcase } from '../components/investor_showcase';
+import { LegalComplianceSection } from '../components/legal_compliance_section';
 import { Shield, Sparkles, Cpu, Vote, ArrowRight } from 'lucide-react';
 
 export default function HomePage() {
@@ -65,11 +67,14 @@ export default function HomePage() {
 
         <div className="mt-12 grid grid-cols-2 gap-4 border-t border-slate-800/80 pt-8 sm:grid-cols-4">
           <StatBox value="2-5" label="Milestone Tranches" />
-          <StatBox value="> 50%" label="Weighted Vote Quorum" />
+          <StatBox value="25% / >50%" label="Adaptive Vote Quorum" />
           <StatBox value="1%" label="Success Fee Only" />
           <StatBox value="0% Fee" label="On Failed Goal (100% Refund)" />
         </div>
       </section>
+
+      {/* Investor & Startup Pitch Showcase ("Auto-Ad" & Interactive Calculator) */}
+      <InvestorShowcase />
 
       <section className="grid gap-6 md:grid-cols-3">
         <FeatureCard
@@ -114,6 +119,9 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      {/* Legality, Anonymity & Compliance Hub */}
+      <LegalComplianceSection />
     </div>
   );
 }

@@ -130,30 +130,65 @@ mod tests {
         assert_eq!(MAX_FUNDING_SECONDS, 183 * 86_400);
         assert_eq!(VOTING_WINDOW_SECONDS, 7 * 86_400);
         assert_eq!(REVISION_WINDOW_SECONDS, 30 * 86_400);
+        assert_eq!(QUORUM_TURNOUT_BPS, 2_500);
     }
 
     #[test]
-    fn test_voting_quorum_strict_greater_than_half() {
+    fn test_adaptive_quorum_governance() {
+        use crate::instructions::voting::evaluate_adaptive_quorum;
+
         let total_raised: u64 = 1_000_000_000;
 
-        let yes_50: u64 = 500_000_000;
-        let is_approved_50 = (yes_50 as u128) * 2 > (total_raised as u128);
-        assert!(!is_approved_50, "50% exact approval must be rejected");
+        // Boundary 1: <25% turnout (e.g. 24.9% turnout with 100% YES) -> rejected (false)
+        let yes_24_9: u64 = 249_000_000;
+        let no_24_9: u64 = 0;
+        assert!(
+            !evaluate_adaptive_quorum(yes_24_9, no_24_9, total_raised),
+            "<25% turnout must be rejected even with 100% YES votes"
+        );
 
-        let yes_above_50: u64 = 500_000_001;
-        let is_approved_above = (yes_above_50 as u128) * 2 > (total_raised as u128);
-        assert!(is_approved_above, "50% + 1 lamport must be approved");
+        // Boundary 2: >=25% turnout with 50% YES / 50% NO tie -> rejected (false)
+        let yes_tie_25: u64 = 125_000_000;
+        let no_tie_25: u64 = 125_000_000;
+        assert!(
+            !evaluate_adaptive_quorum(yes_tie_25, no_tie_25, total_raised),
+            "25% exact turnout with 50/50 tie must be rejected"
+        );
 
-        let yes_below_50: u64 = 499_999_999;
-        let is_approved_below = (yes_below_50 as u128) * 2 > (total_raised as u128);
-        assert!(!is_approved_below, "<50% must be rejected");
+        let yes_tie_50: u64 = 250_000_000;
+        let no_tie_50: u64 = 250_000_000;
+        assert!(
+            !evaluate_adaptive_quorum(yes_tie_50, no_tie_50, total_raised),
+            "50% turnout with 50/50 tie must be rejected"
+        );
 
-        let yes_100: u64 = total_raised;
-        let is_approved_100 = (yes_100 as u128) * 2 > (total_raised as u128);
-        assert!(is_approved_100, "100% must be approved");
+        // Boundary 3: 25% exact turnout with 50% + 1 lamport YES -> approved (true)
+        let yes_25_majority: u64 = 125_000_001;
+        let no_25_minority: u64 = 124_999_999;
+        assert!(
+            evaluate_adaptive_quorum(yes_25_majority, no_25_minority, total_raised),
+            "25% exact turnout with 50% + 1 lamport YES must be approved"
+        );
 
-        let is_approved_0 = (0u128) * 2 > (total_raised as u128);
-        assert!(!is_approved_0, "0% must be rejected");
+        // Boundary 4: 30% turnout with 20% YES / 10% NO (66.7% of active voters) -> approved (true)
+        let yes_30_pct: u64 = 200_000_000;
+        let no_10_pct: u64 = 100_000_000;
+        assert!(
+            evaluate_adaptive_quorum(yes_30_pct, no_10_pct, total_raised),
+            "30% turnout with 20% YES / 10% NO (66.7% active voter majority) must be approved"
+        );
+
+        // Additional edge case: 0 total raised should never approve
+        assert!(
+            !evaluate_adaptive_quorum(100, 0, 0),
+            "Zero total raised must be rejected"
+        );
+
+        // Additional edge case: 0 active votes should never approve
+        assert!(
+            !evaluate_adaptive_quorum(0, 0, total_raised),
+            "Zero active votes must be rejected"
+        );
     }
 
     #[test]

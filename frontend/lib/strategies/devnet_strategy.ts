@@ -1,64 +1,184 @@
-import { address, createSolanaRpc } from '@solana/kit';
+import { address } from '@solana/kit';
 import { CampaignModel, PledgeModel, TransactionResult } from '../types';
 import { CreateCampaignParams, TransactionStrategy } from './transaction_strategy';
-import { PROGRAM_ID, SOLANA_RPC_URL } from '../constants';
+import { LAMPORTS_PER_SOL } from '../constants';
 import { MockTransactionStrategy } from './mock_strategy';
+import {
+  buildAddTrancheIx,
+  buildCancelPledgeIx,
+  buildCreateDraftIx,
+  buildFinalizeVoteIx,
+  buildPledgeIx,
+  buildRefundForIx,
+  buildReleaseTrancheIx,
+  buildSealTermsIx,
+  buildSubmitEvidenceIx,
+  buildVoteMilestoneIx,
+  buildWithdrawClaimIx,
+  sha256Sync,
+} from '../solana/codec';
+import {
+  findBackerAddress,
+  findBondAddress,
+  findCampaignAddress,
+  findTrancheAddress,
+  findVaultAddress,
+  findVoteAddress,
+} from '../solana/pdas';
+import { directChainReader } from '../solana/chain_reader';
+import { walletSigner } from '../solana/wallet_signer';
+import { hexToBytes, normalizeEvidenceBytes } from '../solana/evidence';
 
 export class DevnetTransactionStrategy implements TransactionStrategy {
   readonly modeName = 'devnet' as const;
   private readonly fallbackMock = new MockTransactionStrategy();
-  private readonly rpc = createSolanaRpc(SOLANA_RPC_URL);
 
   async getCampaign(campaignAddress: string): Promise<CampaignModel | null> {
-    try {
-      const accountInfo = await this.rpc.getAccountInfo(address(campaignAddress), { encoding: 'base64' }).send();
-      if (!accountInfo.value) {
-        return this.fallbackMock.getCampaign(campaignAddress);
-      }
-      return this.fallbackMock.getCampaign(campaignAddress);
-    } catch {
-      return this.fallbackMock.getCampaign(campaignAddress);
-    }
+    return directChainReader.getCampaign(campaignAddress);
   }
 
   async listCampaigns(): Promise<CampaignModel[]> {
-    return this.fallbackMock.listCampaigns();
+    return directChainReader.listCampaigns();
   }
 
   async getUserPledges(backerWallet: string): Promise<PledgeModel[]> {
-    return this.fallbackMock.getUserPledges(backerWallet);
+    return directChainReader.getUserPledges(backerWallet);
   }
 
-  async createCampaign(params: CreateCampaignParams, creatorWallet: string): Promise<TransactionResult> {
-    const mockResult = await this.fallbackMock.createCampaign(params, creatorWallet);
-    const mockTxHash = `devnet_${Math.random().toString(36).substring(2, 12)}_${Date.now()}`;
+  async createCampaign(
+    params: CreateCampaignParams,
+    creatorWallet: string
+  ): Promise<TransactionResult> {
+    const creatorAddr = address(creatorWallet);
+    const campaignId = BigInt(Date.now());
+
+    // 1. Derive PDAs
+    const campaignPda = await findCampaignAddress(creatorAddr, campaignId);
+    const vaultPda = await findVaultAddress(campaignPda);
+    const bondPda = await findBondAddress(campaignPda);
+
+    const goalLamports = BigInt(Math.round(params.goalSol * LAMPORTS_PER_SOL));
+    const termsData = `${params.title}:${params.description}:${params.goalSol}:${params.durationDays}`;
+    const termsHash = sha256Sync(termsData);
+
+    // 2. Build CreateDraft instruction
+    const createDraftIx = buildCreateDraftIx({
+      creator: creatorAddr,
+      campaign: campaignPda,
+      campaignId,
+      goalLamports,
+      termsHash,
+      contentUri: 1,
+    });
+
+    // 3. Build AddTranche instructions for each milestone
+    const addTrancheIxs = [];
+    const trancheAddresses = [];
+    for (let i = 0; i < params.milestones.length; i++) {
+      const m = params.milestones[i];
+      const tranchePda = await findTrancheAddress(campaignPda, i);
+      trancheAddresses.push(tranchePda);
+      const workPeriodSeconds = BigInt(Math.round(m.workPeriodDays * 86_400));
+
+      addTrancheIxs.push(
+        buildAddTrancheIx({
+          creator: creatorAddr,
+          campaign: campaignPda,
+          tranche: tranchePda,
+          index: i,
+          shareBps: m.shareBps,
+          workPeriodSeconds,
+        })
+      );
+    }
+
+    // 4. Build SealTerms instruction
+    const fundingSeconds = BigInt(params.durationDays * 86_400);
+    const sealTermsIx = buildSealTermsIx({
+      creator: creatorAddr,
+      campaign: campaignPda,
+      vault: vaultPda,
+      bond: bondPda,
+      fundingSeconds,
+      termsHash,
+      trancheAddresses,
+    });
+
+    // 5. Compile, simulate, and sign transaction via @solana/kit and WalletSigner
+    const txResult = await walletSigner.compileAndSign({
+      payer: creatorAddr,
+      instructions: [createDraftIx, ...addTrancheIxs, sealTermsIx],
+    });
+
+    // Sync local state cache
+    await this.fallbackMock.createCampaign(params, creatorWallet);
+
     return {
-      signature: mockTxHash,
-      explorerUrl: `https://explorer.solana.com/tx/${mockTxHash}?cluster=devnet`,
-      success: true,
-      message: `Transaction confirmed on Solana Devnet (Program: ${PROGRAM_ID})`,
+      ...txResult,
+      message: `Bestcrow Campaign drafted, tranches registered, and terms sealed on Solana Devnet (Address: ${campaignPda})`,
     };
   }
 
-  async pledge(campaignAddress: string, amountSol: number, backerWallet: string): Promise<TransactionResult> {
+  async pledge(
+    campaignAddress: string,
+    amountSol: number,
+    backerWallet: string
+  ): Promise<TransactionResult> {
+    const backerAddr = address(backerWallet);
+    const campaignAddr = address(campaignAddress);
+
+    const backerLedgerPda = await findBackerAddress(campaignAddr, backerAddr);
+    const vaultPda = await findVaultAddress(campaignAddr);
+    const amountLamports = BigInt(Math.round(amountSol * LAMPORTS_PER_SOL));
+
+    const pledgeIx = buildPledgeIx({
+      backer: backerAddr,
+      campaign: campaignAddr,
+      backerLedger: backerLedgerPda,
+      vault: vaultPda,
+      amountLamports,
+    });
+
+    const txResult = await walletSigner.compileAndSign({
+      payer: backerAddr,
+      instructions: [pledgeIx],
+    });
+
     await this.fallbackMock.pledge(campaignAddress, amountSol, backerWallet);
-    const mockTxHash = `pledge_devnet_${Math.random().toString(36).substring(2, 12)}`;
+
     return {
-      signature: mockTxHash,
-      explorerUrl: `https://explorer.solana.com/tx/${mockTxHash}?cluster=devnet`,
-      success: true,
-      message: `Pledge of ${amountSol} SOL signed and confirmed on Devnet`,
+      ...txResult,
+      message: `Pledge of ${amountSol} SOL escrowed to Vault PDA on Solana Devnet`,
     };
   }
 
-  async cancelPledge(campaignAddress: string, backerWallet: string): Promise<TransactionResult> {
+  async cancelPledge(
+    campaignAddress: string,
+    backerWallet: string
+  ): Promise<TransactionResult> {
+    const backerAddr = address(backerWallet);
+    const campaignAddr = address(campaignAddress);
+
+    const backerLedgerPda = await findBackerAddress(campaignAddr, backerAddr);
+    const vaultPda = await findVaultAddress(campaignAddr);
+
+    const cancelIx = buildCancelPledgeIx({
+      backer: backerAddr,
+      campaign: campaignAddr,
+      backerLedger: backerLedgerPda,
+      vault: vaultPda,
+    });
+
+    const txResult = await walletSigner.compileAndSign({
+      payer: backerAddr,
+      instructions: [cancelIx],
+    });
+
     await this.fallbackMock.cancelPledge(campaignAddress, backerWallet);
-    const mockTxHash = `cancel_devnet_${Math.random().toString(36).substring(2, 12)}`;
+
     return {
-      signature: mockTxHash,
-      explorerUrl: `https://explorer.solana.com/tx/${mockTxHash}?cluster=devnet`,
-      success: true,
-      message: 'Pledge cancelled on Devnet, SOL returned',
+      ...txResult,
+      message: 'Pledge cancelled and 100% principal refunded from Vault PDA on Devnet',
     };
   }
 
@@ -69,13 +189,36 @@ export class DevnetTransactionStrategy implements TransactionStrategy {
     evidenceUri: string,
     creatorWallet: string
   ): Promise<TransactionResult> {
-    await this.fallbackMock.submitEvidence(campaignAddress, milestoneIndex, evidenceHash, evidenceUri);
-    const mockTxHash = `evidence_devnet_${Math.random().toString(36).substring(2, 12)}`;
+    const creatorAddr = address(creatorWallet);
+    const campaignAddr = address(campaignAddress);
+
+    const tranchePda = await findTrancheAddress(campaignAddr, milestoneIndex);
+    const rawBytes = hexToBytes(evidenceHash);
+    const normalizedBytes = new Uint8Array(normalizeEvidenceBytes(rawBytes));
+
+    const submitIx = buildSubmitEvidenceIx({
+      creator: creatorAddr,
+      campaign: campaignAddr,
+      tranche: tranchePda,
+      index: milestoneIndex,
+      evidenceHash: normalizedBytes,
+    });
+
+    const txResult = await walletSigner.compileAndSign({
+      payer: creatorAddr,
+      instructions: [submitIx],
+    });
+
+    await this.fallbackMock.submitEvidence(
+      campaignAddress,
+      milestoneIndex,
+      evidenceHash,
+      evidenceUri
+    );
+
     return {
-      signature: mockTxHash,
-      explorerUrl: `https://explorer.solana.com/tx/${mockTxHash}?cluster=devnet`,
-      success: true,
-      message: `Arweave evidence hash committed to milestone ${milestoneIndex + 1} on Devnet`,
+      ...txResult,
+      message: `Decentralized proof committed to Tranche PDA on Solana Devnet (Index ${milestoneIndex + 1})`,
     };
   }
 
@@ -85,57 +228,166 @@ export class DevnetTransactionStrategy implements TransactionStrategy {
     approve: boolean,
     backerWallet: string
   ): Promise<TransactionResult> {
-    await this.fallbackMock.voteMilestone(campaignAddress, milestoneIndex, approve, backerWallet);
-    const mockTxHash = `vote_devnet_${Math.random().toString(36).substring(2, 12)}`;
+    const backerAddr = address(backerWallet);
+    const campaignAddr = address(campaignAddress);
+
+    const tranchePda = await findTrancheAddress(campaignAddr, milestoneIndex);
+    const backerLedgerPda = await findBackerAddress(campaignAddr, backerAddr);
+
+    // Retrieve current round (default 1)
+    const campaign = await this.getCampaign(campaignAddress);
+    const round = campaign?.milestones[milestoneIndex]?.round ?? 1;
+
+    const voteRecordPda = await findVoteAddress(tranchePda, round, backerAddr);
+
+    const voteIx = buildVoteMilestoneIx({
+      backer: backerAddr,
+      campaign: campaignAddr,
+      tranche: tranchePda,
+      backerLedger: backerLedgerPda,
+      voteRecord: voteRecordPda,
+      index: milestoneIndex,
+      approve,
+    });
+
+    const txResult = await walletSigner.compileAndSign({
+      payer: backerAddr,
+      instructions: [voteIx],
+    });
+
+    await this.fallbackMock.voteMilestone(
+      campaignAddress,
+      milestoneIndex,
+      approve,
+      backerWallet
+    );
+
     return {
-      signature: mockTxHash,
-      explorerUrl: `https://explorer.solana.com/tx/${mockTxHash}?cluster=devnet`,
-      success: true,
-      message: `Milestone vote (${approve ? 'Yes' : 'No'}) confirmed on Solana Devnet`,
+      ...txResult,
+      message: `Milestone vote (${approve ? 'Approve' : 'Reject'}) recorded on Devnet with backer weight`,
     };
   }
 
-  async finalizeVote(campaignAddress: string, milestoneIndex: number, _callerWallet: string): Promise<TransactionResult> {
-    await this.fallbackMock.finalizeVote(campaignAddress, milestoneIndex);
-    const mockTxHash = `finalize_vote_devnet_${Math.random().toString(36).substring(2, 12)}`;
+  async finalizeVote(
+    campaignAddress: string,
+    milestoneIndex: number,
+    callerWallet: string
+  ): Promise<TransactionResult> {
+    const callerAddr = address(callerWallet);
+    const campaignAddr = address(campaignAddress);
+
+    const tranchePda = await findTrancheAddress(campaignAddr, milestoneIndex);
+
+    const finalizeIx = buildFinalizeVoteIx({
+      caller: callerAddr,
+      campaign: campaignAddr,
+      tranche: tranchePda,
+      index: milestoneIndex,
+    });
+
+    const txResult = await walletSigner.compileAndSign({
+      payer: callerAddr,
+      instructions: [finalizeIx],
+    });
+
+    await this.fallbackMock.finalizeVote(campaignAddress, milestoneIndex, callerWallet);
+
     return {
-      signature: mockTxHash,
-      explorerUrl: `https://explorer.solana.com/tx/${mockTxHash}?cluster=devnet`,
-      success: true,
-      message: 'Vote window closed and finalized on Solana Devnet',
+      ...txResult,
+      message: 'Vote window closed and finalized under Adaptive Quorum on Solana Devnet',
     };
   }
 
-  async releaseMilestone(campaignAddress: string, milestoneIndex: number, _callerWallet: string): Promise<TransactionResult> {
+  async releaseMilestone(
+    campaignAddress: string,
+    milestoneIndex: number,
+    callerWallet: string
+  ): Promise<TransactionResult> {
+    const callerAddr = address(callerWallet);
+    const campaignAddr = address(campaignAddress);
+
+    const tranchePda = await findTrancheAddress(campaignAddr, milestoneIndex);
+
+    const releaseIx = buildReleaseTrancheIx({
+      caller: callerAddr,
+      campaign: campaignAddr,
+      tranche: tranchePda,
+      index: milestoneIndex,
+    });
+
+    const txResult = await walletSigner.compileAndSign({
+      payer: callerAddr,
+      instructions: [releaseIx],
+    });
+
     await this.fallbackMock.releaseMilestone(campaignAddress, milestoneIndex);
-    const mockTxHash = `release_devnet_${Math.random().toString(36).substring(2, 12)}`;
+
     return {
-      signature: mockTxHash,
-      explorerUrl: `https://explorer.solana.com/tx/${mockTxHash}?cluster=devnet`,
-      success: true,
-      message: `Milestone ${milestoneIndex + 1} tranche released on Devnet`,
+      ...txResult,
+      message: `Milestone ${milestoneIndex + 1} tranche released on Solana Devnet`,
     };
   }
 
-  async claimMilestoneFunds(campaignAddress: string, milestoneIndex: number, _creatorWallet: string): Promise<TransactionResult> {
+  async claimMilestoneFunds(
+    campaignAddress: string,
+    milestoneIndex: number,
+    creatorWallet: string
+  ): Promise<TransactionResult> {
+    const creatorAddr = address(creatorWallet);
+    const campaignAddr = address(campaignAddress);
+
+    const tranchePda = await findTrancheAddress(campaignAddr, milestoneIndex);
+    const vaultPda = await findVaultAddress(campaignAddr);
+
+    const withdrawIx = buildWithdrawClaimIx({
+      creator: creatorAddr,
+      campaign: campaignAddr,
+      tranche: tranchePda,
+      vault: vaultPda,
+      index: milestoneIndex,
+    });
+
+    const txResult = await walletSigner.compileAndSign({
+      payer: creatorAddr,
+      instructions: [withdrawIx],
+    });
+
     await this.fallbackMock.claimMilestoneFunds(campaignAddress, milestoneIndex);
-    const mockTxHash = `claim_devnet_${Math.random().toString(36).substring(2, 12)}`;
+
     return {
-      signature: mockTxHash,
-      explorerUrl: `https://explorer.solana.com/tx/${mockTxHash}?cluster=devnet`,
-      success: true,
-      message: 'Milestone funds transferred to creator wallet on Devnet',
+      ...txResult,
+      message: `Milestone funds disbursed from Vault PDA to creator wallet on Solana Devnet`,
     };
   }
 
-  async claimRefund(campaignAddress: string, backerWallet: string): Promise<TransactionResult> {
+  async claimRefund(
+    campaignAddress: string,
+    backerWallet: string
+  ): Promise<TransactionResult> {
+    const backerAddr = address(backerWallet);
+    const campaignAddr = address(campaignAddress);
+
+    const backerLedgerPda = await findBackerAddress(campaignAddr, backerAddr);
+    const vaultPda = await findVaultAddress(campaignAddr);
+
+    const refundIx = buildRefundForIx({
+      caller: backerAddr,
+      campaign: campaignAddr,
+      backerLedger: backerLedgerPda,
+      backerWallet: backerAddr,
+      vault: vaultPda,
+    });
+
+    const txResult = await walletSigner.compileAndSign({
+      payer: backerAddr,
+      instructions: [refundIx],
+    });
+
     await this.fallbackMock.claimRefund(campaignAddress, backerWallet);
-    const mockTxHash = `refund_devnet_${Math.random().toString(36).substring(2, 12)}`;
+
     return {
-      signature: mockTxHash,
-      explorerUrl: `https://explorer.solana.com/tx/${mockTxHash}?cluster=devnet`,
-      success: true,
-      message: '100% refund disbursed from vault PDA on Devnet',
+      ...txResult,
+      message: '100% refund disbursed from Vault PDA to backer wallet on Solana Devnet',
     };
   }
 }

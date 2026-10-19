@@ -18,9 +18,12 @@ test.describe('Bestcrow Enterprise - Milestone Escrow Lifecycle E2E', () => {
     await firstCampaignLink.click();
     await expect(page).toHaveURL(/.*campaign\/.+/);
 
-    // 4. Verify Financial Breakdown and Milestone Timeline
+    // 4. Verify Financial Breakdown, Milestone Timeline, Emergency Exit, Investor Showcase, and Legal/MiCA Compliance
     await expect(page.getByText('Financial Breakdown & Escrow Pool')).toBeVisible();
     await expect(page.getByText('Milestone Tranches & Community Governance')).toBeVisible();
+    await expect(page.getByText('Self-Custody & Shutdown Survival (Emergency Exit)')).toBeVisible();
+    await expect(page.getByText('8% vs. 1%: The Crowdfunding Fee Revolution')).toBeVisible();
+    await expect(page.getByText('Legality, Anonymity & Non-Intermediary Architecture')).toBeVisible();
 
     // 5. Deposit a Pledge
     const pledgeInput = page.locator('input[type="number"]').first();

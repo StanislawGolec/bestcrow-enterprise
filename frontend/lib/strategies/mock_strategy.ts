@@ -1,6 +1,7 @@
 import { CampaignModel, MilestoneModel, PledgeModel, TransactionResult } from '../types';
 import { CreateCampaignParams, TransactionStrategy } from './transaction_strategy';
 import { MOCK_STORAGE_KEYS, PROTOCOL_FEE_BPS, BPS_DENOMINATOR } from '../constants';
+import { evaluateAdaptiveQuorum } from '../solana/codec';
 
 const INITIAL_MOCK_CAMPAIGNS: CampaignModel[] = [
   {
@@ -433,7 +434,7 @@ export class MockTransactionStrategy implements TransactionStrategy {
     };
   }
 
-  async finalizeVote(campaignAddress: string, milestoneIndex: number): Promise<TransactionResult> {
+  async finalizeVote(campaignAddress: string, milestoneIndex: number, _callerWallet?: string): Promise<TransactionResult> {
     const campaigns = this.loadCampaigns();
     const campaign = campaigns.find(c => c.address === campaignAddress);
     if (!campaign) throw new Error('Campaign not found');
@@ -441,7 +442,11 @@ export class MockTransactionStrategy implements TransactionStrategy {
     const milestone = campaign.milestones.find(m => m.index === milestoneIndex);
     if (!milestone) throw new Error('Milestone not found');
 
-    const isApproved = milestone.yesWeightSol * 2 > campaign.raisedSol;
+    const { approved: isApproved } = evaluateAdaptiveQuorum(
+      milestone.yesWeightSol,
+      milestone.noWeightSol,
+      campaign.raisedSol
+    );
     if (isApproved) {
       milestone.status = 'approved';
     } else if (milestone.round === 1) {

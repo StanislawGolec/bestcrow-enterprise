@@ -19,6 +19,14 @@ pub struct FinalizeFunding<'info> {
     /// CHECK: Target protocol treasury receiving the 1% fee upon success.
     #[account(mut)]
     pub treasury: UncheckedAccount<'info>,
+    /// CHECK: Protocol vault account derived as PDA.
+    #[account(
+        mut,
+        seeds = [VAULT_SEED, campaign.key().as_ref()],
+        bump
+    )]
+    pub vault: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 pub fn finalize_funding<'info>(ctx: Context<'_, '_, 'info, 'info, FinalizeFunding<'info>>) -> Result<()> {
@@ -52,12 +60,23 @@ pub fn finalize_funding<'info>(ctx: Context<'_, '_, 'info, 'info, FinalizeFundin
                 PROTOCOL_TREASURY,
                 BestcrowError::BondUnavailable
             );
-            **ctx.accounts.treasury.to_account_info().try_borrow_mut_lamports()? = ctx
-                .accounts
-                .treasury
-                .lamports()
-                .checked_add(protocol_fee)
-                .ok_or(BestcrowError::ArithmeticOverflow)?;
+            let campaign_key = campaign.key();
+            let vault_seeds = &[
+                VAULT_SEED,
+                campaign_key.as_ref(),
+                &[ctx.bumps.vault],
+            ];
+            anchor_lang::system_program::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.vault.to_account_info(),
+                        to: ctx.accounts.treasury.to_account_info(),
+                    },
+                    &[&vault_seeds[..]],
+                ),
+                protocol_fee,
+            )?;
         }
 
         allocate_tranche_amounts(ctx.remaining_accounts, campaign.distributable)?;

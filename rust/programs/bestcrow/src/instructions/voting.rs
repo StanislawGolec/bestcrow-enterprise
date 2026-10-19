@@ -191,6 +191,19 @@ pub struct FinalizeVote<'info> {
     pub tranche: Account<'info, Tranche>,
 }
 
+pub fn evaluate_adaptive_quorum(yes_weight: u64, no_weight: u64, total_raised: u64) -> bool {
+    if total_raised == 0 {
+        return false;
+    }
+
+    let active_votes = (yes_weight as u128) + (no_weight as u128);
+    let turnout_met = active_votes * (BPS_DENOMINATOR as u128)
+        >= (total_raised as u128) * (QUORUM_TURNOUT_BPS as u128);
+    let majority_yes = yes_weight > no_weight;
+
+    turnout_met && majority_yes
+}
+
 pub fn finalize_vote(ctx: Context<FinalizeVote>, index: u8) -> Result<()> {
     let campaign = &mut ctx.accounts.campaign;
     require!(
@@ -218,7 +231,7 @@ pub fn finalize_vote(ctx: Context<FinalizeVote>, index: u8) -> Result<()> {
         BestcrowError::VoteWindowStillOpen
     );
 
-    let is_approved = (tranche.yes_weight as u128) * 2 > (campaign.raised as u128);
+    let is_approved = evaluate_adaptive_quorum(tranche.yes_weight, tranche.no_weight, campaign.raised);
 
     if is_approved {
         tranche.status = TrancheStatus::Approved;

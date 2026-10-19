@@ -4,6 +4,9 @@ import { useEffect, useState, use } from 'react';
 import { useStrategy } from '../../../components/providers';
 import { CampaignModel } from '../../../lib/types';
 import { MilestoneTimeline } from '../../../components/milestone_timeline';
+import { EmergencyExitPanel } from '../../../components/emergency_exit_panel';
+import { InvestorShowcase } from '../../../components/investor_showcase';
+import { LegalComplianceSection } from '../../../components/legal_compliance_section';
 import { useCampaignStream } from '../../../lib/hooks/use_campaign_stream';
 import { ExternalLink, ShieldCheck, Clock, Users, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -203,9 +206,21 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ addre
           </div>
 
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-white">Milestone Tranches & Community Governance</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xl font-bold text-white">Milestone Tranches & Community Governance</h2>
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-teal-500/30 bg-teal-500/10 px-3 py-1 text-xs font-semibold text-teal-300">
+                <ShieldCheck className="h-3.5 w-3.5 text-teal-400" />
+                <span>Adaptive Quorum: &gt;= 25% Turnout &amp; &gt; 50% Active Voter Majority</span>
+              </div>
+            </div>
             <MilestoneTimeline campaign={campaign} onRefresh={fetchCampaign} />
           </div>
+
+          <EmergencyExitPanel campaign={campaign} onActionSuccess={fetchCampaign} />
+
+          <InvestorShowcase />
+
+          <LegalComplianceSection />
         </div>
 
         <div className="space-y-6">
