@@ -23,13 +23,22 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Build Backend Image in ACR
+      - name: Log in to Azure Container Registry (ACR)
         run: |
-          az acr build \
-            --registry ${{ secrets.ACR_NAME }} \
-            --image bestcrow-backend:${{ github.sha }} \
-            --image bestcrow-backend:latest \
-            -f docker/Dockerfile.backend .
+          az acr login --name ${{ secrets.ACR_NAME }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Backend Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.backend
+          push: true
+          tags: |
+            ${{ secrets.ACR_NAME }}.azurecr.io/bestcrow-backend:${{ github.sha }}
+            ${{ secrets.ACR_NAME }}.azurecr.io/bestcrow-backend:latest
 
       - name: Deploy Backend to Container App
         run: |
@@ -44,15 +53,18 @@ jobs:
           FQDN=$(az containerapp show --name bestcrow-backend --resource-group rg-bestcrow --query properties.configuration.ingress.fqdn -o tsv)
           echo "url=https://$FQDN" >> $GITHUB_OUTPUT
 
-      - name: Build Frontend Image in ACR
-        run: |
-          az acr build \
-            --registry ${{ secrets.ACR_NAME }} \
-            --image bestcrow-frontend:${{ github.sha }} \
-            --image bestcrow-frontend:latest \
-            --build-arg NEXT_PUBLIC_API_URL=${{ steps.backend_url.outputs.url }} \
-            --build-arg NEXT_PUBLIC_PAYMENT_MODE=mock \
-            -f docker/Dockerfile.frontend .
+      - name: Build & Push Frontend Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.frontend
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ steps.backend_url.outputs.url }}
+            NEXT_PUBLIC_PAYMENT_MODE=mock
+          tags: |
+            ${{ secrets.ACR_NAME }}.azurecr.io/bestcrow-frontend:${{ github.sha }}
+            ${{ secrets.ACR_NAME }}.azurecr.io/bestcrow-frontend:latest
 
       - name: Deploy Frontend to Container App
         run: |
