@@ -1,0 +1,25 @@
+# Production build for Bestcrow Enterprise Backend API & Solana Indexer
+FROM node:22-alpine AS dependencies
+WORKDIR /app
+COPY backend/package.json backend/package-lock.json* ./
+RUN npm ci
+
+FROM node:22-alpine AS builder
+WORKDIR /app
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY backend/ .
+RUN npm run build
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup --system --gid 10001 nodejs && adduser --system --uid 10001 backend
+RUN mkdir -p /app/data && chown -R backend:nodejs /app/data
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+
+USER backend
+EXPOSE 4000
+ENV PORT=4000
+CMD ["node", "dist/index.js"]
