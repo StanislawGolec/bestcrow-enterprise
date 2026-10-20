@@ -1,4 +1,4 @@
-name: Continuous Deployment to Azure Container Apps
+name: Continuous Deployment to Azure Container Registry
 
 on:
   push:
@@ -11,21 +11,19 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
-    name: Build & Deploy to Azure Container Apps
+  build-and-push:
+    name: Build & Push Images to Azure Container Registry
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
       - name: Log in to Azure Container Registry (ACR)
-        run: |
-          az acr login --name ${{ secrets.ACR_NAME }}
+        uses: docker/login-action@v3
+        with:
+          registry: bestcrowacr1104.azurecr.io
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -37,21 +35,8 @@ jobs:
           file: docker/Dockerfile.backend
           push: true
           tags: |
-            ${{ secrets.ACR_NAME }}.azurecr.io/bestcrow-backend:${{ github.sha }}
-            ${{ secrets.ACR_NAME }}.azurecr.io/bestcrow-backend:latest
-
-      - name: Deploy Backend to Container App
-        run: |
-          az containerapp update \
-            --name bestcrow-backend \
-            --resource-group rg-bestcrow \
-            --image ${{ secrets.ACR_NAME }}.azurecr.io/bestcrow-backend:${{ github.sha }}
-
-      - name: Resolve Backend Ingress URL
-        id: backend_url
-        run: |
-          FQDN=$(az containerapp show --name bestcrow-backend --resource-group rg-bestcrow --query properties.configuration.ingress.fqdn -o tsv)
-          echo "url=https://$FQDN" >> $GITHUB_OUTPUT
+            bestcrowacr1104.azurecr.io/bestcrow-backend:${{ github.sha }}
+            bestcrowacr1104.azurecr.io/bestcrow-backend:latest
 
       - name: Build & Push Frontend Container Image
         uses: docker/build-push-action@v5
@@ -60,15 +45,17 @@ jobs:
           file: docker/Dockerfile.frontend
           push: true
           build-args: |
-            NEXT_PUBLIC_API_URL=${{ steps.backend_url.outputs.url }}
+            NEXT_PUBLIC_API_URL=https://bestcrow-backend.thankfulwave-5a41557f.polandcentral.azurecontainerapps.io
             NEXT_PUBLIC_PAYMENT_MODE=mock
           tags: |
-            ${{ secrets.ACR_NAME }}.azurecr.io/bestcrow-frontend:${{ github.sha }}
-            ${{ secrets.ACR_NAME }}.azurecr.io/bestcrow-frontend:latest
+            bestcrowacr1104.azurecr.io/bestcrow-frontend:${{ github.sha }}
+            bestcrowacr1104.azurecr.io/bestcrow-frontend:latest
 
-      - name: Deploy Frontend to Container App
+      - name: Deployment Summary
         run: |
-          az containerapp update \
-            --name bestcrow-frontend \
-            --resource-group rg-bestcrow \
-            --image ${{ secrets.ACR_NAME }}.azurecr.io/bestcrow-frontend:${{ github.sha }}
+          echo "### Deployment Status: Images Built & Pushed to ACR" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry:** \`bestcrowacr1104.azurecr.io\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend Image:** \`bestcrowacr1104.azurecr.io/bestcrow-backend:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend Image:** \`bestcrowacr1104.azurecr.io/bestcrow-frontend:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend Ingress:** https://bestcrow-backend.thankfulwave-5a41557f.polandcentral.azurecontainerapps.io" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend Ingress:** https://bestcrow-frontend.thankfulwave-5a41557f.polandcentral.azurecontainerapps.io" >> $GITHUB_STEP_SUMMARY
