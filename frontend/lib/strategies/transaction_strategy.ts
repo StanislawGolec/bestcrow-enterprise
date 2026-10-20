@@ -26,6 +26,7 @@ export interface TransactionStrategy {
   releaseMilestone(campaignAddress: string, milestoneIndex: number, callerWallet: string): Promise<TransactionResult>;
   claimMilestoneFunds(campaignAddress: string, milestoneIndex: number, creatorWallet: string): Promise<TransactionResult>;
   claimRefund(campaignAddress: string, backerWallet: string): Promise<TransactionResult>;
+  deleteCampaign(campaignAddress: string): Promise<TransactionResult>;
 
   getCampaign(campaignAddress: string): Promise<CampaignModel | null>;
   listCampaigns(): Promise<CampaignModel[]>;

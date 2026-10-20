@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useStrategy } from './providers';
-import { ShieldCheck, Layers, PlusCircle, Compass, Wallet } from 'lucide-react';
+import { ShieldCheck, Layers, PlusCircle, Compass, Wallet, RotateCcw } from 'lucide-react';
 
 export function NavigationBar() {
   const pathname = usePathname();
-  const { mode, setMode, activeWallet } = useStrategy();
+  const { mode, setMode, activeWallet, resetMockData } = useStrategy();
 
   const navLinks = [
     { href: '/discover', label: 'Discover', icon: Compass },
@@ -76,6 +76,22 @@ export function NavigationBar() {
               Solana Devnet
             </button>
           </div>
+
+          {mode === 'mock' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Reset all mock campaigns and pledges to default demo data?')) {
+                  resetMockData();
+                }
+              }}
+              title="Reset mock campaigns and pledges to default state"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-400 hover:text-red-400 hover:bg-slate-900 rounded-lg border border-slate-800 transition-colors"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Reset Demo</span>
+            </button>
+          )}
 
           <div className="hidden sm:flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-1.5 text-xs font-mono text-slate-300">
             <Wallet className="h-3.5 w-3.5 text-emerald-400" />

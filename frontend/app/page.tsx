@@ -27,6 +27,15 @@ export default function HomePage() {
     };
   }, [strategy, mode]);
 
+  const handleDelete = async (address: string) => {
+    try {
+      await strategy.deleteCampaign(address);
+      setCampaigns((prev) => prev.filter((c) => c.address !== address));
+    } catch (err) {
+      console.error('Failed to delete campaign:', err);
+    }
+  };
+
   return (
     <div className="space-y-16 py-6">
       <section className="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900/80 via-slate-900/40 to-slate-950 p-8 sm:p-14 shadow-2xl">
@@ -114,7 +123,11 @@ export default function HomePage() {
         ) : (
           <div className="grid gap-6 md:grid-cols-3">
             {campaigns.map((campaign) => (
-              <CampaignCard key={campaign.address} campaign={campaign} />
+              <CampaignCard
+                key={campaign.address}
+                campaign={campaign}
+                onDelete={mode === 'mock' ? handleDelete : undefined}
+              />
             ))}
           </div>
         )}

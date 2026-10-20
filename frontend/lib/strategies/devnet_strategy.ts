@@ -390,4 +390,8 @@ export class DevnetTransactionStrategy implements TransactionStrategy {
       message: '100% refund disbursed from Vault PDA to backer wallet on Solana Devnet',
     };
   }
+
+  async deleteCampaign(_campaignAddress: string): Promise<TransactionResult> {
+    throw new Error('On-chain Solana accounts cannot be deleted directly without contract close instructions');
+  }
 }

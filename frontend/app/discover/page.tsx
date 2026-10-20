@@ -44,6 +44,15 @@ export default function DiscoverPage() {
     { id: 'failed', label: 'Failed (Refundable)' },
   ];
 
+  const handleDelete = async (address: string) => {
+    try {
+      await strategy.deleteCampaign(address);
+      setCampaigns((prev) => prev.filter((c) => c.address !== address));
+    } catch (err) {
+      console.error('Failed to delete campaign:', err);
+    }
+  };
+
   return (
     <div className="space-y-8 py-4">
       <div className="space-y-2">
@@ -97,7 +106,11 @@ export default function DiscoverPage() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map((campaign) => (
-            <CampaignCard key={campaign.address} campaign={campaign} />
+            <CampaignCard
+              key={campaign.address}
+              campaign={campaign}
+              onDelete={mode === 'mock' ? handleDelete : undefined}
+            />
           ))}
         </div>
       )}

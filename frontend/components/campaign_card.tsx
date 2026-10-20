@@ -1,8 +1,14 @@
 import Link from 'next/link';
 import { CampaignModel } from '../lib/types';
-import { CheckCircle2, Clock, Users, ArrowUpRight } from 'lucide-react';
+import { CheckCircle2, Clock, Users, ArrowUpRight, Trash2 } from 'lucide-react';
 
-export function CampaignCard({ campaign }: { campaign: CampaignModel }) {
+export function CampaignCard({
+  campaign,
+  onDelete,
+}: {
+  campaign: CampaignModel;
+  onDelete?: (address: string) => void;
+}) {
   const percentFunded = Math.min(Math.round((campaign.raisedSol / campaign.goalSol) * 100), 100);
   const daysLeft = Math.max(0, Math.ceil((campaign.fundingDeadline - Math.floor(Date.now() / 1000)) / 86400));
 
@@ -83,13 +89,32 @@ export function CampaignCard({ campaign }: { campaign: CampaignModel }) {
           <span>{campaign.backerCount} backers</span>
         </div>
 
-        <Link
-          href={`/campaign/${campaign.address}`}
-          className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:bg-emerald-500 hover:text-slate-950"
-        >
-          View Details
-          <ArrowUpRight className="h-3.5 w-3.5" />
-        </Link>
+        <div className="flex items-center gap-2">
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (window.confirm(`Delete "${campaign.title}" from local storage?`)) {
+                  onDelete(campaign.address);
+                }
+              }}
+              title="Delete campaign"
+              className="inline-flex items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 p-1.5 text-xs text-red-400 hover:bg-red-500/20 transition-all"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          <Link
+            href={`/campaign/${campaign.address}`}
+            className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:bg-emerald-500 hover:text-slate-950"
+          >
+            View Details
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </div>
     </div>
   );

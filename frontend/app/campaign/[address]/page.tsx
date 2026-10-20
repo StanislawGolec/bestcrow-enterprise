@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, use } from 'react';
+import { useRouter } from 'next/navigation';
 import { useStrategy } from '../../../components/providers';
 import { CampaignModel } from '../../../lib/types';
 import { MilestoneTimeline } from '../../../components/milestone_timeline';
@@ -8,9 +9,10 @@ import { EmergencyExitPanel } from '../../../components/emergency_exit_panel';
 import { InvestorShowcase } from '../../../components/investor_showcase';
 import { LegalComplianceSection } from '../../../components/legal_compliance_section';
 import { useCampaignStream } from '../../../lib/hooks/use_campaign_stream';
-import { ExternalLink, ShieldCheck, Clock, Users, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ExternalLink, ShieldCheck, Clock, Users, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ address: string }> }) {
+  const router = useRouter();
   const resolvedParams = use(params);
   const campaignAddress = resolvedParams.address;
   const { strategy, activeWallet, mode } = useStrategy();
@@ -87,6 +89,22 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ addre
     }
   };
 
+  const handleDeleteCampaign = async () => {
+    if (!window.confirm('Delete this mock campaign from local storage?')) return;
+    setSubmitting(true);
+    setFeedback(null);
+    try {
+      const res = await strategy.deleteCampaign(campaignAddress);
+      setFeedback({ message: res.message || 'Campaign deleted', isError: false });
+      setTimeout(() => {
+        router.push('/discover');
+      }, 400);
+    } catch (err) {
+      setFeedback({ message: err instanceof Error ? err.message : 'Delete failed', isError: true });
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6 py-8 animate-pulse">
@@ -132,16 +150,31 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ addre
               <span>{isLiveConnected ? 'Live Feed Active' : 'Polling Sync'}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-            <span>PDA: {campaign.address.slice(0, 8)}...{campaign.address.slice(-6)}</span>
-            <a
-              href={`https://explorer.solana.com/address/${campaign.address}?cluster=devnet`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-emerald-400 hover:text-emerald-300"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+              <span>PDA: {campaign.address.slice(0, 8)}...{campaign.address.slice(-6)}</span>
+              <a
+                href={`https://explorer.solana.com/address/${campaign.address}?cluster=devnet`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-emerald-400 hover:text-emerald-300"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+
+            {mode === 'mock' && (
+              <button
+                type="button"
+                onClick={handleDeleteCampaign}
+                disabled={submitting}
+                className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                title="Delete this mock campaign from local storage"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete Campaign</span>
+              </button>
+            )}
           </div>
         </div>
 

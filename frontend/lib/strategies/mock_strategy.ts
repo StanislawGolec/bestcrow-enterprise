@@ -531,4 +531,21 @@ export class MockTransactionStrategy implements TransactionStrategy {
       message: '100% refund reclaimed successfully in Mock Mode',
     };
   }
+
+  async deleteCampaign(campaignAddress: string): Promise<TransactionResult> {
+    let campaigns = this.loadCampaigns();
+    campaigns = campaigns.filter((c) => c.address !== campaignAddress);
+    this.saveCampaigns(campaigns);
+
+    let pledges = this.loadPledges();
+    pledges = pledges.filter((p) => p.campaignAddress !== campaignAddress);
+    this.savePledges(pledges);
+
+    return {
+      signature: `mock_tx_del_${Date.now()}`,
+      explorerUrl: '',
+      success: true,
+      message: 'Campaign deleted successfully from local storage',
+    };
+  }
 }

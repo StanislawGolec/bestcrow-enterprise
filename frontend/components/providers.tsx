@@ -13,6 +13,7 @@ interface StrategyContextValue {
   strategy: TransactionStrategy;
   activeWallet: string;
   setActiveWallet: (wallet: string) => void;
+  resetMockData: () => void;
 }
 
 const StrategyContext = createContext<StrategyContextValue | null>(null);
@@ -44,12 +45,20 @@ export function StrategyProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(MOCK_STORAGE_KEYS.ACTIVE_WALLET, wallet);
   };
 
+  const resetMockData = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(MOCK_STORAGE_KEYS.CAMPAIGNS);
+      localStorage.removeItem(MOCK_STORAGE_KEYS.PLEDGES);
+      window.location.reload();
+    }
+  };
+
   const strategy = useMemo<TransactionStrategy>(() => {
     return mode === 'devnet' ? new DevnetTransactionStrategy() : new MockTransactionStrategy();
   }, [mode]);
 
   return (
-    <StrategyContext.Provider value={{ mode, setMode, strategy, activeWallet, setActiveWallet }}>
+    <StrategyContext.Provider value={{ mode, setMode, strategy, activeWallet, setActiveWallet, resetMockData }}>
       {children}
     </StrategyContext.Provider>
   );
