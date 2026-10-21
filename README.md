@@ -211,3 +211,9 @@ Designed to match cloud-native container standards:
 * **Security Context:** Containers run unprivileged (`runAsNonRoot: true`, non-root user `10001`).
 * **Ingress Controller:** NGINX ingress with TLS termination and automatic HTTPS redirection.
 * **Probes:** Configured `livenessProbe` and `readinessProbe` for zero-downtime rolling updates.
+
+---
+
+## Development
+
+Developed with the assistance of agentic AI workflows and LLMs.
